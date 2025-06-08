@@ -2,13 +2,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-df = pd.read_csv('tratamiento1_response_variables.csv')
+df = pd.read_csv('data/processed/response_variables/T1_response_variables.csv')
 
 # List the columns you want to plot
 variables = [
     ("tps", "TPS (Ticks Per Second)"),
     ("cpu_usage", "CPU Usage (%)"),
-    ("ram_usage_MB", "RAM Usage (MB)"),
+    ("ram_usage", "RAM Usage (MB)"),
     ("avg_ping", "Average Latency (ms)"),
     # Add more variables here if needed
 ]

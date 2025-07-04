@@ -7,6 +7,7 @@ import pytz
 # === CONFIGURATION ===
 db_path = "data/raw/database.db"
 local_tz = pytz.timezone('America/Costa_Rica')
+verbose = False  # Set to True to enable detailed logging
 
 # Format: (iteration_number, start_year, start_month, start_day, start_hour, start_minute,
 #                       end_year,   end_month,   end_day,   end_hour,   end_minute)
@@ -151,8 +152,9 @@ def trim_inactive_periods(df, max_minutes_without_players=20):
                 if current_start <= cut_idx:
                     active_periods.append(df_sorted.iloc[max(current_start, group_start_idx):cut_idx + 1])
                 
-                print(f"  Trimmed inactive period: {duration_minutes:.1f} minutes ({start_time.strftime('%H:%M')} - {end_time.strftime('%H:%M')}) -> kept first {max_minutes_without_players} minutes")
-                print(f"  Discarded segment: {discarded_start.strftime('%H:%M')} - {end_time.strftime('%H:%M')} ({rejected_minutes:.1f} minutes)")
+                if verbose:
+                    print(f"  Trimmed inactive period: {duration_minutes:.1f} minutes ({start_time.strftime('%H:%M')} - {end_time.strftime('%H:%M')}) -> kept first {max_minutes_without_players} minutes")
+                    print(f"  Discarded segment: {discarded_start.strftime('%H:%M')} - {end_time.strftime('%H:%M')} ({rejected_minutes:.1f} minutes)")
                 
                 # Set next start after the long inactive period
                 current_start = group_end_idx + 1
@@ -187,10 +189,10 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
         treatment_number: Treatment number
         max_minutes_without_players: Maximum minutes allowed without players before terminating iteration (default: 20)
     """
-    
-    print(f"\n--- PROCESSING TREATMENT T{treatment_number} ---")
-    print(f"Max minutes without players: {max_minutes_without_players}")
-    print(f"Total iterations to process: {len(iterations)}")
+    if verbose:
+        print(f"\n--- PROCESSING TREATMENT T{treatment_number} ---")
+        print(f"Max minutes without players: {max_minutes_without_players}")
+        print(f"Total iterations to process: {len(iterations)}")
 
     # Output folder
     output_folder = "data/processed/response_variables"
@@ -207,14 +209,15 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
         "total_discarded_segments": 0
     }
 
-    # Process each iteration
+        # Process each iteration
     for iteration, sy, sM, sd, sh, sm, ey, eM, ed, eh, em in iterations:
         local_start = local_tz.localize(datetime(sy, sM, sd, sh, sm, 0))
         local_end = local_tz.localize(datetime(ey, eM, ed, eh, em, 0))
         start_time = int(local_start.astimezone(pytz.utc).timestamp() * 1000)
         end_time = int(local_end.astimezone(pytz.utc).timestamp() * 1000)
 
-        print(f"Processing Iteration {iteration}: {local_start.strftime('%H:%M')} - {local_end.strftime('%H:%M')}")
+        if verbose:
+            print(f"Processing Iteration {iteration}: {local_start.strftime('%H:%M')} - {local_end.strftime('%H:%M')}")
 
         conn = sqlite3.connect(db_path)
 
@@ -244,12 +247,28 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
         df_ping = pd.read_sql_query(query_ping, conn, params=(start_time, end_time))
         df_ping["date"] = pd.to_datetime(df_ping["date"], unit="ms").dt.tz_localize('UTC').dt.tz_convert(local_tz)
 
-        # Merge ping data with TPS data based on nearest previous timestamp
-        df = pd.merge_asof(
-            df.sort_values("date"),
-            df_ping.sort_values("date"),
-            on="date", direction="backward"
-        )
+        # FIXED: Handle merge_asof with proper data type consistency
+        if not df_ping.empty:
+            # Ensure consistent data types before merge
+            df_ping['avg_ping'] = pd.to_numeric(df_ping['avg_ping'], errors='coerce')
+            
+            # Merge ping data with TPS data based on nearest previous timestamp
+            df = pd.merge_asof(
+                df.sort_values("date"),
+                df_ping.sort_values("date"),
+                on="date", 
+                direction="backward",
+                suffixes=('', '_ping')  # Avoid column name conflicts
+            )
+        else:
+            # No ping data available, add empty avg_ping column with consistent dtype
+            df['avg_ping'] = pd.Series(dtype='float64')
+
+        # Ensure all numeric columns have consistent dtypes
+        numeric_columns = ['tps', 'cpu_usage', 'ram_usage', 'players_online', 'avg_ping']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
 
         # Check for presence of players
         if df["players_online"].fillna(0).sum() == 0:
@@ -270,10 +289,22 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
         
         # Process each active period as a separate segment
         for segment_idx, active_df in enumerate(active_periods):
-            # Add treatment and iteration columns
+            # Add treatment and iteration columns with consistent dtypes
             active_df = active_df.copy()
             active_df["treatment"] = f"T{treatment_number}"
-            active_df["iteration"] = f"{iteration}_{segment_idx + 1}" if len(active_periods) > 1 else iteration
+            active_df["iteration"] = str(f"{iteration}_{segment_idx + 1}" if len(active_periods) > 1 else iteration)
+            
+            # Ensure all DataFrames have the same column order and types
+            expected_columns = ['date', 'tps', 'cpu_usage', 'ram_usage', 'players_online', 'avg_ping', 'treatment', 'iteration']
+            for col in expected_columns:
+                if col not in active_df.columns:
+                    if col in numeric_columns:
+                        active_df[col] = pd.Series(dtype='float64')
+                    else:
+                        active_df[col] = pd.Series(dtype='object')
+            
+            # Reorder columns to ensure consistency
+            active_df = active_df[expected_columns]
             
             all_data.append(active_df)
         conn.close()
@@ -283,24 +314,129 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
         print(f"ERROR: No valid data found for Treatment T{treatment_number}. No CSV file will be created.")
         print("-" * 60)
         return
-    
+
+    # Filter out any empty DataFrames that might have been created
+    valid_data = [df for df in all_data if not df.empty and len(df) > 0]
+
+    if not valid_data:
+        print(f"ERROR: No valid data found for Treatment T{treatment_number} after filtering. No CSV file will be created.")
+        print("-" * 60)
+        return
+
     # Combine all active periods into a single DataFrame
-    final_df = pd.concat(all_data, ignore_index=True)
+    final_df = pd.concat(valid_data, ignore_index=True, sort=False)
 
     # Export to a single CSV file
     output_path = os.path.join(output_folder, f"T{treatment_number}_response_variables_"+ filename + ".csv")
     final_df.to_csv(output_path, index=False)
     print(f"\nFinal CSV exported: {output_path}")
-    print(f"Total active segments processed: {len(all_data)}")
-    print(f"Total data points: {len(final_df)}")
+
+    if verbose:
+        print(f"Total active segments processed: {len(all_data)}")
+        print(f"Total data points: {len(final_df)}")
+        # Show treatment summary statistics
+        print("\n--- TREATMENT SUMMARY ---")
+        print(f"Total original duration: {treatment_stats['total_minutes']:.1f} minutes")
+        print(f"Accepted duration: {treatment_stats['accepted_minutes']:.1f} minutes ({(treatment_stats['accepted_minutes'])/60:.2f} hours) ({(treatment_stats['accepted_minutes']/treatment_stats['total_minutes']*100):.1f}%)")
+        print(f"Rejected duration: {treatment_stats['rejected_minutes']:.1f} minutes ({(treatment_stats['rejected_minutes']/treatment_stats['total_minutes']*100):.1f}%)")
+        print(f"Total discarded segments: {treatment_stats['total_discarded_segments']}")
+        print("-" * 60)
+    return treatment_stats
+
+def display_treatment_summary_table(all_treatment_stats):
+    """Display treatment statistics in a clean table format"""
+    import pandas as pd
     
-    # Show treatment summary statistics
-    print("\n--- TREATMENT SUMMARY ---")
-    print(f"Total original duration: {treatment_stats['total_minutes']:.1f} minutes")
-    print(f"Accepted duration: {treatment_stats['accepted_minutes']:.1f} minutes ({(treatment_stats['accepted_minutes']/treatment_stats['total_minutes']*100):.1f}%)")
-    print(f"Rejected duration: {treatment_stats['rejected_minutes']:.1f} minutes ({(treatment_stats['rejected_minutes']/treatment_stats['total_minutes']*100):.1f}%)")
-    print(f"Total discarded segments: {treatment_stats['total_discarded_segments']}")
-    print("-" * 60)
+    # Convert stats to DataFrame
+    summary_data = []
+    for treatment_num, stats in all_treatment_stats.items():
+        summary_data.append({
+            'Treatment': f'T{treatment_num}',
+            'Total Minutes': f"{stats['total_minutes']:.1f}",
+            'Accepted Minutes': f"{stats['accepted_minutes']:.1f}",
+            'Accepted Hours': f"{stats['accepted_minutes']/60:.2f}",
+            'Retention %': f"{(stats['accepted_minutes']/stats['total_minutes']*100):.1f}%" if stats['total_minutes'] > 0 else "0%",
+            'Rejected Minutes': f"{stats['rejected_minutes']:.1f}",
+            'Discarded Segments': stats['total_discarded_segments']
+        })
+    
+    df = pd.DataFrame(summary_data)
+    print("\n" + "="*80)
+    print("TREATMENT SUMMARY TABLE")
+    print("="*80)
+    print(df.to_string(index=False))
+    print("="*80)
+
+# Option 2: Rich library for beautiful console tables
+def display_rich_table(all_treatment_stats):
+    """Display results using the rich library for beautiful formatting"""
+    try:
+        from rich.console import Console
+        from rich.table import Table
+        from rich.panel import Panel
+        from rich.layout import Layout
+        from rich.progress import Progress, BarColumn, TextColumn
+        
+        console = Console()
+        
+        # Create main table
+        table = Table(title="Treatment Processing Summary", show_header=True, header_style="bold magenta")
+        table.add_column("Treatment", style="cyan", justify="center")
+        table.add_column("Total Time", justify="right")
+        table.add_column("Accepted", justify="right", style="green")
+        table.add_column("Rejected", justify="right", style="red")
+        table.add_column("Retention", justify="right", style="yellow")
+        table.add_column("Segments", justify="right")
+        
+        total_original = 0
+        total_accepted = 0
+        total_rejected = 0
+        total_segments = 0
+        
+        for treatment_num, stats in all_treatment_stats.items():
+            total_original += stats['total_minutes']
+            total_accepted += stats['accepted_minutes']
+            total_rejected += stats['rejected_minutes']
+            total_segments += stats['total_discarded_segments']
+            
+            retention_pct = (stats['accepted_minutes']/stats['total_minutes']*100) if stats['total_minutes'] > 0 else 0
+            
+            table.add_row(
+                f"T{treatment_num}",
+                f"{stats['total_minutes']:.1f}m",
+                f"{stats['accepted_minutes']:.1f}m ({stats['accepted_minutes']/60:.1f}h)",
+                f"{stats['rejected_minutes']:.1f}m",
+                f"{retention_pct:.1f}%",
+                str(stats['total_discarded_segments'])
+            )
+        
+        # Add totals row
+        table.add_row(
+            "[bold]TOTAL[/bold]",
+            f"[bold]{total_original:.1f}m[/bold]",
+            f"[bold]{total_accepted:.1f}m ({total_accepted/60:.1f}h)[/bold]",
+            f"[bold]{total_rejected:.1f}m[/bold]",
+            f"[bold]{(total_accepted/total_original*100):.1f}%[/bold]" if total_original > 0 else "[bold]0%[/bold]",
+            f"[bold]{total_segments}[/bold]"
+        )
+        
+        console.print(table)
+        
+        # Add summary panel
+        summary_text = f"""
+        Overall Statistics:
+        • Total Original Data: {total_original/60:.1f} hours
+        • Data Retained: {total_accepted/60:.1f} hours ({(total_accepted/total_original*100):.1f}%)
+        • Data Discarded: {total_rejected/60:.1f} hours ({(total_rejected/total_original*100):.1f}%)
+        • Segments Removed: {total_segments}
+        """
+        
+        console.print(Panel(summary_text, title="Processing Summary", border_style="green"))
+        
+    except ImportError:
+        print("Rich library not installed. Install with: pip install rich")
+        display_treatment_summary_table(all_treatment_stats)
+
 
 if __name__ == "__main__":
     print("=" * 60)
@@ -308,16 +444,30 @@ if __name__ == "__main__":
     print(f"Execution time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
     
-    # Extract response variables for each treatment
-    # You can specify the maximum minutes without players (default is 20)
-    extract_response_variables("treatment1", iterations1, 1)
-    extract_response_variables("treatment2", iterations2, 2)
-    extract_response_variables("treatment3", iterations3, 3)
-    extract_response_variables("treatment4", iterations4, 4)
-    extract_response_variables("treatment5", iterations5, 5)
-    extract_response_variables("treatment6", iterations6, 6)
-    extract_response_variables("treatment7", iterations7, 7)
+    # Dictionary to store all treatment statistics
+    all_treatment_stats = {}
     
-    print("=" * 60)
-    print("EXTRACTION PROCESS COMPLETED")
-    print("=" * 60)
+    # Process each treatment and collect stats
+    treatments = [
+        ("treatment1", iterations1, 1),
+        ("treatment2", iterations2, 2),
+        ("treatment3", iterations3, 3),
+        ("treatment4", iterations4, 4),
+        ("treatment5", iterations5, 5),
+        ("treatment6", iterations6, 6),
+        ("treatment7", iterations7, 7)
+    ]
+    
+    for filename, iterations, treatment_num in treatments:
+        # You'd need to modify extract_response_variables to return stats
+        stats = extract_response_variables(filename, iterations, treatment_num)
+        if stats:  # Only add if processing was successful
+            all_treatment_stats[treatment_num] = stats
+    
+    # Display results in a beautiful format
+    print("\n" + "="*60)
+    print("PROCESSING COMPLETE - GENERATING SUMMARY")
+    print("="*60)
+
+    # Try rich table first, fall back to pandas if not available
+    display_rich_table(all_treatment_stats)

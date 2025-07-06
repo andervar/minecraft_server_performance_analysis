@@ -2,6 +2,7 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 import os
+import re
 import pytz
 
 # === CONFIGURATION ===
@@ -178,6 +179,51 @@ def trim_inactive_periods(df, max_minutes_without_players=20):
     
     return active_periods, stats
 
+
+def extract_chunky_intervals(log_folder="data/raw/logs"):
+    """
+    Scans all log files in the given folder for Chunky processing intervals.
+
+    Returns:
+        List of (start_datetime, end_datetime) tuples representing when Chunky was running.
+    """
+    pattern_start = re.compile(r"\[(\d{2}:\d{2}:\d{2})\].*\[Chunky\] Task running")
+    pattern_end = re.compile(r"\[(\d{2}:\d{2}:\d{2})\].*\[Chunky\] Task finished")
+
+    intervals = []
+
+    for filename in sorted(os.listdir(log_folder)):
+        if not filename.endswith(".log"):
+            continue
+
+        # Extract date from filename
+        date_match = re.match(r"(\d{4})-(\d{2})-(\d{2})-\d+\.log", filename)
+        if not date_match:
+            continue
+
+        log_date = datetime.strptime("-".join(date_match.groups()), "%Y-%m-%d")
+
+        file_path = os.path.join(log_folder, filename)
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        current_start = None
+        for line in lines:
+            match_start = pattern_start.search(line)
+            match_end = pattern_end.search(line)
+
+            if match_start and current_start is None:
+                time_part = match_start.group(1)
+                current_start = datetime.combine(log_date.date(), datetime.strptime(time_part, "%H:%M:%S").time())
+
+            elif match_end and current_start is not None:
+                time_part = match_end.group(1)
+                end_time = datetime.combine(log_date.date(), datetime.strptime(time_part, "%H:%M:%S").time())
+                intervals.append((current_start, end_time))
+                current_start = None  # Reset for next possible interval
+
+    return intervals
+
 def  extract_response_variables(filename, iterations, treatment_number, max_minutes_without_players=20):
     """
     Extracts response variables from the database for specified iterations.
@@ -208,6 +254,13 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
         "rejected_minutes": 0,
         "total_discarded_segments": 0
     }
+
+    chunky_intervals_naive  = extract_chunky_intervals()
+    chunky_intervals = [(local_tz.localize(start), local_tz.localize(end)) for start, end in chunky_intervals_naive]
+    
+    # Remove timestamps that fall into any Chunky processing interval
+    def is_in_chunky_interval(ts):
+        return any(start <= ts <= end for start, end in chunky_intervals)
 
         # Process each iteration
     for iteration, sy, sM, sd, sh, sm, ey, eM, ed, eh, em in iterations:
@@ -260,6 +313,9 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
                 direction="backward",
                 suffixes=('', '_ping')  # Avoid column name conflicts
             )
+
+            df["in_chunky"] = df["date"].apply(is_in_chunky_interval)
+            df = df[~df["in_chunky"]].drop(columns=["in_chunky"])
         else:
             # No ping data available, add empty avg_ping column with consistent dtype
             df['avg_ping'] = pd.Series(dtype='float64')

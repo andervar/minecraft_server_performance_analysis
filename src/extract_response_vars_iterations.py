@@ -2,6 +2,7 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 import os
+import re
 import pytz
 
 # === CONFIGURATION ===
@@ -178,6 +179,51 @@ def trim_inactive_periods(df, max_minutes_without_players=20):
     
     return active_periods, stats
 
+
+def extract_chunky_intervals(log_folder="data/raw/logs"):
+    """
+    Scans all log files in the given folder for Chunky processing intervals.
+
+    Returns:
+        List of (start_datetime, end_datetime) tuples representing when Chunky was running.
+    """
+    pattern_start = re.compile(r"\[(\d{2}:\d{2}:\d{2})\].*\[Chunky\] Task running")
+    pattern_end = re.compile(r"\[(\d{2}:\d{2}:\d{2})\].*\[Chunky\] Task finished")
+
+    intervals = []
+
+    for filename in sorted(os.listdir(log_folder)):
+        if not filename.endswith(".log"):
+            continue
+
+        # Extract date from filename
+        date_match = re.match(r"(\d{4})-(\d{2})-(\d{2})-\d+\.log", filename)
+        if not date_match:
+            continue
+
+        log_date = datetime.strptime("-".join(date_match.groups()), "%Y-%m-%d")
+
+        file_path = os.path.join(log_folder, filename)
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        current_start = None
+        for line in lines:
+            match_start = pattern_start.search(line)
+            match_end = pattern_end.search(line)
+
+            if match_start and current_start is None:
+                time_part = match_start.group(1)
+                current_start = datetime.combine(log_date.date(), datetime.strptime(time_part, "%H:%M:%S").time())
+
+            elif match_end and current_start is not None:
+                time_part = match_end.group(1)
+                end_time = datetime.combine(log_date.date(), datetime.strptime(time_part, "%H:%M:%S").time())
+                intervals.append((current_start, end_time))
+                current_start = None  # Reset for next possible interval
+
+    return intervals
+
 def  extract_response_variables(filename, iterations, treatment_number, max_minutes_without_players=20):
     """
     Extracts response variables from the database for specified iterations.
@@ -209,6 +255,13 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
         "total_discarded_segments": 0
     }
 
+    chunky_intervals_naive  = extract_chunky_intervals()
+    chunky_intervals = [(local_tz.localize(start), local_tz.localize(end)) for start, end in chunky_intervals_naive]
+    
+    # Remove timestamps that fall into any Chunky processing interval
+    def is_in_chunky_interval(ts):
+        return any(start <= ts <= end for start, end in chunky_intervals)
+
         # Process each iteration
     for iteration, sy, sM, sd, sh, sm, ey, eM, ed, eh, em in iterations:
         local_start = local_tz.localize(datetime(sy, sM, sd, sh, sm, 0))
@@ -236,8 +289,39 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
         df = pd.read_sql_query(query, conn, params=(start_time, end_time))
         df["date"] = pd.to_datetime(df["date"], unit="ms").dt.tz_localize('UTC').dt.tz_convert(local_tz)
 
+        # Query average ping
+        query_ping = """
+        SELECT date, avg(avg_ping) as avg_ping
+        FROM plan_ping
+        WHERE date BETWEEN ? AND ?
+        GROUP BY date
+        ORDER BY date ASC
+        """
+        df_ping = pd.read_sql_query(query_ping, conn, params=(start_time, end_time))
+        df_ping["date"] = pd.to_datetime(df_ping["date"], unit="ms").dt.tz_localize('UTC').dt.tz_convert(local_tz)
+
+        # FIXED: Handle merge_asof with proper data type consistency
+        if not df_ping.empty:
+            # Ensure consistent data types before merge
+            df_ping['avg_ping'] = pd.to_numeric(df_ping['avg_ping'], errors='coerce')
+            
+            # Merge ping data with TPS data based on nearest previous timestamp
+            df = pd.merge_asof(
+                df.sort_values("date"),
+                df_ping.sort_values("date"),
+                on="date", 
+                direction="backward",
+                suffixes=('', '_ping')  # Avoid column name conflicts
+            )
+
+            df["in_chunky"] = df["date"].apply(is_in_chunky_interval)
+            df = df[~df["in_chunky"]].drop(columns=["in_chunky"])
+        else:
+            # No ping data available, add empty avg_ping column with consistent dtype
+            df['avg_ping'] = pd.Series(dtype='float64')
+
         # Ensure all numeric columns have consistent dtypes
-        numeric_columns = ['tps', 'cpu_usage', 'ram_usage', 'players_online']
+        numeric_columns = ['tps', 'cpu_usage', 'ram_usage', 'players_online', 'avg_ping']
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -267,7 +351,7 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
             active_df["iteration"] = str(f"{iteration}_{segment_idx + 1}" if len(active_periods) > 1 else iteration)
             
             # Ensure all DataFrames have the same column order and types
-            expected_columns = ['date', 'tps', 'cpu_usage', 'ram_usage', 'players_online', 'treatment', 'iteration']
+            expected_columns = ['date', 'tps', 'cpu_usage', 'ram_usage', 'players_online', 'avg_ping', 'treatment', 'iteration']
             for col in expected_columns:
                 if col not in active_df.columns:
                     if col in numeric_columns:

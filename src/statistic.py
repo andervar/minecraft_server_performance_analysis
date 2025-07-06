@@ -6,7 +6,8 @@ def analyze_response_variables(filename):
     This function reads a CSV file containing various response variables and prints
     summary statistics for each specified variable.
     """
-
+    print("-" * 50)
+    print(f"Analyzing response variables from: {filename}\n")
     # Load your CSV file with all response variables
     df = pd.read_csv(filename)
 
@@ -15,7 +16,7 @@ def analyze_response_variables(filename):
         'tps',           # Ticks Per Second
         'cpu_usage',     # CPU Usage (total, per-core analysis requires more columns)
         'ram_usage',  # RAM usage in MB
-        'avg_ping',      # Average latency (ms)
+        'players_online', # Number of players online
     ]
 
     for var in variables:

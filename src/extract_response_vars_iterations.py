@@ -236,36 +236,8 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
         df = pd.read_sql_query(query, conn, params=(start_time, end_time))
         df["date"] = pd.to_datetime(df["date"], unit="ms").dt.tz_localize('UTC').dt.tz_convert(local_tz)
 
-        # Query average ping
-        query_ping = """
-        SELECT date, avg(avg_ping) as avg_ping
-        FROM plan_ping
-        WHERE date BETWEEN ? AND ?
-        GROUP BY date
-        ORDER BY date ASC
-        """
-        df_ping = pd.read_sql_query(query_ping, conn, params=(start_time, end_time))
-        df_ping["date"] = pd.to_datetime(df_ping["date"], unit="ms").dt.tz_localize('UTC').dt.tz_convert(local_tz)
-
-        # FIXED: Handle merge_asof with proper data type consistency
-        if not df_ping.empty:
-            # Ensure consistent data types before merge
-            df_ping['avg_ping'] = pd.to_numeric(df_ping['avg_ping'], errors='coerce')
-            
-            # Merge ping data with TPS data based on nearest previous timestamp
-            df = pd.merge_asof(
-                df.sort_values("date"),
-                df_ping.sort_values("date"),
-                on="date", 
-                direction="backward",
-                suffixes=('', '_ping')  # Avoid column name conflicts
-            )
-        else:
-            # No ping data available, add empty avg_ping column with consistent dtype
-            df['avg_ping'] = pd.Series(dtype='float64')
-
         # Ensure all numeric columns have consistent dtypes
-        numeric_columns = ['tps', 'cpu_usage', 'ram_usage', 'players_online', 'avg_ping']
+        numeric_columns = ['tps', 'cpu_usage', 'ram_usage', 'players_online']
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -295,7 +267,7 @@ def  extract_response_variables(filename, iterations, treatment_number, max_minu
             active_df["iteration"] = str(f"{iteration}_{segment_idx + 1}" if len(active_periods) > 1 else iteration)
             
             # Ensure all DataFrames have the same column order and types
-            expected_columns = ['date', 'tps', 'cpu_usage', 'ram_usage', 'players_online', 'avg_ping', 'treatment', 'iteration']
+            expected_columns = ['date', 'tps', 'cpu_usage', 'ram_usage', 'players_online', 'treatment', 'iteration']
             for col in expected_columns:
                 if col not in active_df.columns:
                     if col in numeric_columns:

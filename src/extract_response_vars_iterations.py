@@ -61,33 +61,35 @@ iterations7 = [
     ("2", 2025, 6, 22, 18, 0, 2025, 6, 22, 21, 0),
 ]
 
-def trim_inactive_periods(df, max_minutes_without_players=20):
+import pandas as pd
+
+def trim_inactive_periods(df, max_minutes_without_players=1, verbose=True):
     """
-    Trims periods of inactivity longer than the specified minutes.
-    Instead of discarding the entire iteration, it removes only the excessive inactive periods.
+    Trims periods of inactivity longer than specified minutes by completely removing excess inactivity.
     
     Args:
-        df: DataFrame with the data
-        max_minutes_without_players: Maximum minutes allowed without players
+        df: DataFrame with 'date' and 'players_online' columns
+        max_minutes_without_players: Maximum allowed minutes without players
+        verbose: Show processing details (default: False)
         
     Returns:
-        Tuple: (List of DataFrames representing active periods, dict with statistics)
+        Tuple: (List of DataFrames for active periods, dict with statistics)
     """
     if df.empty:
         return [], {"total_minutes": 0, "accepted_minutes": 0, "rejected_minutes": 0, "discarded_segments": []}
     
-    # Sort by date to ensure chronological order
-    df_sorted = df.sort_values("date").copy().reset_index(drop=True)
-    
-    # Fill NaN values with 0 for players_online
+    # Sort and prepare data
+    df_sorted = df.sort_values("date").copy()
     df_sorted["players_online"] = df_sorted["players_online"].fillna(0)
-    
-    # Calculate total duration in minutes
     total_duration = (df_sorted["date"].iloc[-1] - df_sorted["date"].iloc[0]).total_seconds() / 60
     
-    # Find consecutive periods with 0 players
-    no_players_mask = df_sorted["players_online"] == 0
+    # Create time differences between consecutive rows
+    df_sorted["time_diff"] = df_sorted["date"].diff().dt.total_seconds().fillna(0) / 60
+    next_diff = df_sorted["date"].shift(-1) - df_sorted["date"]
+    df_sorted["next_diff"] = next_diff.dt.total_seconds().fillna(0) / 60
     
+    # Find inactive periods
+    no_players_mask = df_sorted["players_online"] == 0
     if not no_players_mask.any():
         stats = {
             "total_minutes": total_duration,
@@ -95,85 +97,65 @@ def trim_inactive_periods(df, max_minutes_without_players=20):
             "rejected_minutes": 0,
             "discarded_segments": []
         }
-        return [df_sorted], stats  # No periods without players, return original data
+        return [df_sorted], stats
     
-    # Group consecutive periods without players
+    # Group consecutive inactive periods
     groups = (no_players_mask != no_players_mask.shift()).cumsum()
+    group_data = df_sorted.groupby(groups)
     
     active_periods = []
-    current_start = 0
     discarded_segments = []
     total_rejected_minutes = 0
+    current_active = []  # Track current active period rows
     
-    # Process each group to find long inactive periods
-    for group_id in groups.unique():
-        group_mask = groups == group_id
-        group_data = df_sorted[group_mask]
+    for (group_id, group_df) in group_data:
+        is_inactive = group_df["players_online"].iloc[0] == 0
         
-        if group_data["players_online"].iloc[0] == 0 and len(group_data) >= 2:
-            # This is an inactive period
-            start_time = group_data["date"].iloc[0]
-            end_time = group_data["date"].iloc[-1]
-            duration_minutes = (end_time - start_time).total_seconds() / 60
+        # Calculate true duration of inactive period
+        if is_inactive:
+            if len(group_df) == 1:
+                duration = group_df["next_diff"].iloc[0]
+            else:
+                duration = (group_df["date"].iloc[-1] - group_df["date"].iloc[0]).total_seconds() / 60
+        else:
+            current_active.append(group_df)
+            continue
             
-            if duration_minutes > max_minutes_without_players:
-                # Long inactive period found
-                group_start_idx = group_data.index[0]
-                group_end_idx = group_data.index[-1]
-                
-                # Calculate the cut point (keep only first max_minutes_without_players)
-                max_duration_seconds = max_minutes_without_players * 60
-                cut_time = start_time + pd.Timedelta(seconds=max_duration_seconds)
-                
-                # Find the index closest to the cut time within the inactive period
-                cut_mask = group_data["date"] <= cut_time
-                if cut_mask.any():
-                    cut_idx = group_data[cut_mask].index[-1]
-                    discarded_start = df_sorted.iloc[cut_idx]["date"]
-                else:
-                    cut_idx = group_start_idx
-                    discarded_start = start_time
-                
-                # Calculate rejected time
-                rejected_minutes = (end_time - discarded_start).total_seconds() / 60
-                total_rejected_minutes += rejected_minutes
-                
-                # Record discarded segment
-                discarded_segments.append({
-                    "start": discarded_start.strftime('%H:%M'),
-                    "end": end_time.strftime('%H:%M'),
-                    "duration": rejected_minutes
-                })
-                
-                # Add active period before the long inactive period
-                if current_start < group_start_idx:
-                    active_periods.append(df_sorted.iloc[current_start:group_start_idx])
-                
-                # Add the allowed portion of inactive period
-                if current_start <= cut_idx:
-                    active_periods.append(df_sorted.iloc[max(current_start, group_start_idx):cut_idx + 1])
-                
-                if verbose:
-                    print(f"  Trimmed inactive period: {duration_minutes:.1f} minutes ({start_time.strftime('%H:%M')} - {end_time.strftime('%H:%M')}) -> kept first {max_minutes_without_players} minutes")
-                    print(f"  Discarded segment: {discarded_start.strftime('%H:%M')} - {end_time.strftime('%H:%M')} ({rejected_minutes:.1f} minutes)")
-                
-                # Set next start after the long inactive period
-                current_start = group_end_idx + 1
+        # Process long inactive periods
+        if duration > max_minutes_without_players:
+            if current_active:
+                active_periods.append(pd.concat(current_active))
+                current_active = []
+            
+            # Calculate excess time to remove
+            excess_time = duration - max_minutes_without_players
+            total_rejected_minutes += excess_time
+            
+            # Record discarded segment
+            discarded_segments.append({
+                "start": (group_df["date"].iloc[0] + pd.Timedelta(minutes=max_minutes_without_players)).strftime('%H:%M'),
+                "end": group_df["date"].iloc[-1].strftime('%H:%M'),
+                "duration": excess_time
+            })
+            
+            if verbose:
+                print(f"Trimmed {excess_time:.2f} min inactivity: "
+                      f"{group_df['date'].iloc[0].strftime('%H:%M')} - "
+                      f"{group_df['date'].iloc[-1].strftime('%H:%M')}")
+        else:
+            # Short inactivity remains in active data
+            current_active.append(group_df)
     
-    # Add remaining data after the last processed group
-    if current_start < len(df_sorted):
-        active_periods.append(df_sorted.iloc[current_start:])
+    # Add final active segment
+    if current_active:
+        active_periods.append(pd.concat(current_active))
     
-    # Filter out empty periods
-    active_periods = [period for period in active_periods if not period.empty]
-    
-    # Calculate accepted minutes
+    # Calculate statistics
     accepted_minutes = total_duration - total_rejected_minutes
-    
     stats = {
-        "total_minutes": total_duration,
-        "accepted_minutes": accepted_minutes,
-        "rejected_minutes": total_rejected_minutes,
+        "total_minutes": round(total_duration, 2),
+        "accepted_minutes": round(accepted_minutes, 2),
+        "rejected_minutes": round(total_rejected_minutes, 2),
         "discarded_segments": discarded_segments
     }
     

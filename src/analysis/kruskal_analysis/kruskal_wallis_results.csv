@@ -1,0 +1,4 @@
+metric,h_statistic,p_value,degrees_freedom,effect_size_eta_squared,effect_size_interpretation,significant,groups,group_sizes
+tps,448.60626567710335,9.792648265466808e-94,6,0.07271336712290181,Large,True,"['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']","[484, 797, 1642, 108, 2416, 406, 241]"
+cpu_usage,968.557020049695,5.6424713091268e-206,6,0.15813323805646376,Large,True,"['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']","[484, 797, 1642, 108, 2416, 406, 241]"
+ram_usage,3337.285732360622,0.0,6,0.5472787468967673,Large,True,"['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']","[484, 797, 1642, 108, 2416, 406, 241]"

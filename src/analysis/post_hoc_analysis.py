@@ -169,10 +169,10 @@ def create_post_hoc_visualization(all_comparisons, save_path="post_hoc_analysis"
         # Plot 1: P-values heatmap
         mask = np.eye(n_treatments, dtype=bool)  # Mask diagonal
         sns.heatmap(p_matrix, annot=True, fmt='.4f', mask=mask,
-                   xticklabels=treatments, yticklabels=treatments,
-                   cmap='RdYlBu_r', center=0.05, ax=ax1,
-                   cbar_kws={'label': 'Bonferroni Corrected P-value'})
-        ax1.set_title('P-Values Matrix\n(Red = Significant, Blue = Not Significant)')
+           xticklabels=treatments, yticklabels=treatments,
+           cmap='autumn', center=0.5, ax=ax1,
+           cbar_kws={'label': 'Bonferroni Corrected P-value'})
+        ax1.set_title('P-Values Matrix\n(Red = Significant, Yellow = Not Significant)')
         
         # Plot 2: Effect sizes heatmap
         sns.heatmap(effect_matrix, annot=True, fmt='.3f', mask=mask,

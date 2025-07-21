@@ -36,7 +36,7 @@ def load_all_treatment_data():
 
 def create_box_plots(df, save_path="box_plots"):
     """
-    Create box plots for TPS, CPU, and RAM metrics
+    Create box plots for TPS, CPU, and RAM metrics with reference lines
     """
     if df is None or df.empty:
         print("No data to plot")
@@ -45,9 +45,10 @@ def create_box_plots(df, save_path="box_plots"):
     # Create output directory
     os.makedirs(save_path, exist_ok=True)
     
-    # Set style
-    plt.style.use('seaborn-v0_8')
-    sns.set_palette("husl")
+    # Set style and uniform color
+    plt.style.use('seaborn-v0_8-darkgrid')
+    BOX_COLOR = "#1f77b4" 
+    LINE_COLOR = "#d62728"  # Color for the reference line
     
     # Metrics to plot
     metrics = [
@@ -59,36 +60,33 @@ def create_box_plots(df, save_path="box_plots"):
     for metric, title, note in metrics:
         plt.figure(figsize=(12, 8))
         
-        # Create box plot
+        # Create box plot with uniform color
         box_plot = sns.boxplot(data=df, x='treatment', y=metric, 
-                              showmeans=True, meanprops={'marker': 'D', 'markerfacecolor': 'red', 'markersize': 8})
+                             color=BOX_COLOR,
+                             showmeans=True, 
+                             meanprops={'marker': 'D', 'markerfacecolor': 'white', 
+                                      'markeredgecolor': 'black', 'markersize': 8})
+        
+        # Calculate and add horizontal line at lowest averages
+        averages = df.groupby('treatment')[metric].mean()
+        lowest_average = averages.min()
+        plt.axhline(y=lowest_average, color=LINE_COLOR, linestyle='--', linewidth=1.5,
+                   label=f'Lowest Average: {lowest_average:.2f}')
         
         # Customize plot
         plt.title(f'{title} by Treatment\n{note}', fontsize=16, fontweight='bold', pad=20)
         plt.xlabel('Treatment', fontsize=14, fontweight='bold')
         plt.ylabel(title, fontsize=14, fontweight='bold')
         plt.grid(True, alpha=0.3)
+        plt.legend(loc='upper right')
         
         # Add sample size annotations
         for i, treatment in enumerate(sorted(df['treatment'].unique())):
             treatment_data = df[df['treatment'] == treatment][metric]
             n = len(treatment_data)
-            plt.text(i, treatment_data.min() - (treatment_data.max() - treatment_data.min()) * 0.1, 
-                    f'n={n}', ha='center', va='top', fontsize=10, fontweight='bold')
-        
-        # Add statistics summary as text
-        stats_text = []
-        for treatment in sorted(df['treatment'].unique()):
-            treatment_data = df[df['treatment'] == treatment][metric]
-            mean_val = treatment_data.mean()
-            median_val = treatment_data.median()
-            std_val = treatment_data.std()
-            stats_text.append(f"{treatment}: μ={mean_val:.2f}, M={median_val:.2f}, σ={std_val:.2f}")
-        
-        # Add text box with statistics
-        textstr = '\n'.join(stats_text)
-        props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
-        plt.figtext(0.02, 0.02, textstr, fontsize=9, verticalalignment='bottom', bbox=props)
+            plt.text(i, plt.ylim()[1] * 1.02, 
+                    f'n={n}', ha='center', va='center', 
+                    fontsize=10, fontweight='bold')
         
         plt.tight_layout()
         

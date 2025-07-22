@@ -17,7 +17,7 @@
   - [Análisis de Varianza entre Tratamientos](#análisis-de-varianza-entre-tratamientos)
   - [Análisis Post-Hoc](#análisis-post-hoc)
 - [Conclusiones y Recomendaciones](#conclusiones-y-recomendaciones)
-
+- [Referencias](#referencias)
 
 ## Etapa 3:  Presentación de los resultados obtenidos
 
@@ -221,10 +221,10 @@ Como recordatorio, los tratamientos T3, T5, T6 y T7 alteraban los parámetros de
 
 Tras el análisis descriptivo y visual, es fundamental verificar los supuestos estadísticos para aplicar pruebas de comparación entre tratamientos. En particular, el análisis de varianza (ANOVA) requiere que los datos de cada grupo sigan una distribución normal.
 
-Para ello, se realizó un análisis de la normalidad para cada variable de respuesta (TPS, uso de CPU y uso de RAM) en cada tratamiento, utilizando el test de Shapiro-Wilk y gráficos Q-Q.
+Para ello, se realizó un análisis de la normalidad para cada variable de respuesta (TPS, uso de CPU y uso de RAM) en cada tratamiento, utilizando el test de Shapiro-Wilk y gráficos Q-Q (Malato, 2025).
 
 **Test de Shapiro-Wilk:**  
-Se aplicó el test de Shapiro-Wilk a los datos de cada tratamiento y métrica. En todos los casos, los p-valores obtenidos fueron menores a 0.05, lo que indica que las distribuciones no son normales.
+Se aplicó el test de Shapiro-Wilk a los datos de cada tratamiento y métrica. En casi todos los casos, los p-valores obtenidos fueron menores a 0.05, lo que indica que las distribuciones no siguen una distrubución normal.
 
 **Gráficos Q-Q:**  
 Se elaboraron gráficos Q-Q para cada combinación de tratamiento y métrica, observándose desviaciones sistemáticas respecto a la línea de normalidad, lo que respalda los resultados del test de Shapiro-Wilk.
@@ -235,7 +235,7 @@ Se elaboraron gráficos Q-Q para cada combinación de tratamiento y métrica, ob
 
 ![Q-Q plot de RAM por tratamiento](images/qq_plot_ram_usage.png)
 
-**Resultados de la prueba de normalidad**
+#### **Resultados de la prueba de normalidad**
 
 La mayoría de las distribuciones por tratamiento no cumplen con el supuesto de normalidad (p-valor < 0.05 en casi todos los casos).
 
@@ -245,7 +245,7 @@ En contraste, todas las demás distribuciones (incluyendo las de TPS y CPU) no p
 
 Por tanto, NO es adecuado utilizar un análisis de varianza paramétrico (ANOVA), ya que este requiere que todas las distribuciones cumplan con el supuesto de normalidad y homogeneidad de varianzas.
 
-**Resumen de resultados del test de normalidad**
+#### **Resumen de resultados del test de normalidad**
 
 - TPS: 0/7 tratamientos con normalidad
 
@@ -257,7 +257,7 @@ Por tanto, NO es adecuado utilizar un análisis de varianza paramétrico (ANOVA)
 
 ### Análisis de Varianza entre Tratamientos
 
-Dado que no se cumplen los supuestos necesarios para aplicar pruebas paramétricas, **se emplea el método no paramétrico de Kruskal-Wallis** para comparar los tratamientos en cada variable de respuesta (TPS, CPU y RAM). Esta prueba permite determinar si existen diferencias significativas entre las distribuciones de los tratamientos, sin requerir normalidad en los datos.
+Dado que no se cumplen los supuestos necesarios para aplicar pruebas paramétricas, **se emplea el método no paramétrico de Kruskal-Wallis** para comparar los tratamientos en cada variable de respuesta (TPS, CPU y RAM). Esta prueba permite determinar si existen diferencias significativas entre las distribuciones de los tratamientos, sin requerir normalidad en los datos (GeeksforGeeks, 2022).
 
 Parámetros del test de Kruskal-Wallis:
 
@@ -291,8 +291,8 @@ Después de identificar diferencias globales significativas con la prueba de Kru
 
 **Metodología:**
 
-- Para cada variable significativa, se realizaron comparaciones pareadas entre todos los tratamientos usando la prueba de Mann-Whitney U (equivalente a la prueba de Dunn).
-- Se aplicó la **corrección de Bonferroni** para controlar el error por comparaciones múltiples. Al realizar múltiples pruebas U de Mann-Whitney, la probabilidad de encontrar un resultado significativo por casualidad (error tipo I) aumenta. La corrección de Bonferroni ayuda a reducir esta probabilidad ajustando el valor p de cada prueba. En lugar de usar un valor alfa predefinido (por ejemplo, 0.05), la corrección divide este valor alfa por el número de pruebas realizadas.
+- Para cada variable significativa, se realizaron comparaciones pareadas entre todos los tratamientos usando la prueba de Mann-Whitney U.
+- Se aplicó la **corrección de Bonferroni** para controlar el error por comparaciones múltiples. Al realizar múltiples pruebas U de Mann-Whitney, la probabilidad de encontrar un resultado significativo por casualidad (error tipo I) aumenta. La corrección de Bonferroni ayuda a reducir esta probabilidad ajustando el valor p de cada prueba (GeeksforGeeks, 2025). En lugar de usar un valor alfa predefinido (por ejemplo, 0.05), la corrección divide este valor alfa por el número de pruebas realizadas.
 - Para cada comparación se reportan:
   - **p (Bonferroni):** Valor-p ajustado. Si es menor a 0.05, la diferencia es significativa.
   - **r (tamaño del efecto):** Magnitud de la diferencia observada. Interpretación: r < 0.1 (negligible), < 0.3 (pequeño), < 0.5 (mediano), ≥ 0.5 (grande).
@@ -439,3 +439,20 @@ T5 o T7 para entornos que priorizan estabilidad absoluta sobre eficiencia de rec
 **Evitar por Completo:**
 
 T2 en entornos de producción debido a su vulnerabilidad a colapsos críticos de rendimiento, a pesar de su eficiencia aparente en condiciones normales.
+
+
+## Referencias
+
+- GeeksforGeeks. (2022, December 14). How to perform a KruskalWallis test in Python. GeeksforGeeks. <https://www.geeksforgeeks.org/python/how-to-perform-a-kruskal-wallis-test-in-python/>
+
+- GeeksforGeeks. (2025, July 5). Mann and Whitney U test. GeeksforGeeks. <https://www.geeksforgeeks.org/machine-learning/mann-and-whitney-u-test/>
+
+- Malato, G. (2025, January 23). An introduction to the Shapiro-Wilk test for normality. Built In. <https://builtin.com/data-science/shapiro-wilk-test>
+
+- GeeksforGeeks. (2025, April 21). Bonferroni test. GeeksforGeeks. <https://www.geeksforgeeks.org/r-language/bonferroni-test/>
+
+- kruskal — SciPy v1.16.0 Manual. (n.d.). <https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.kruskal.html>
+
+- mannwhitneyu — SciPy v1.16.0 Manual. (n.d.). <https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mannwhitneyu.html>
+
+- shapiro — SciPy v1.16.0 Manual. (n.d.). <https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.shapiro.html>

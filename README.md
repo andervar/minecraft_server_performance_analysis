@@ -1,15 +1,25 @@
-# **Proyecto: Análisis de Desempeño de un  un Servidor de Minecraft**
+# **Proyecto: Análisis de Desempeño de un Servidor de Minecraft**
+
+En este proyecto se evaluó el rendimiento de un servidor de Minecraft bajo distintas configuraciones, con el objetivo de encontrar la mejor combinación de parámetros que ofrezcan mayor estabilidad, eficiencia en el uso de recursos y mejor experiencia de usuario.
+
+## Curso
+
+CI-0125. Desempeño y Experimentación
 
 ## Integrantes
 
 - Anderson Vargas
 - Esteban Isaac Baires Cerdas.
 
-## Indice
+## Docente
+
+- Ariel Mora Jiménez
+
+## Índice
 
 - [Variables de respuesta finales](#variables-de-respuesta-finales)
 - [Factores estudiados](#factores-estudiados)
-- [Cambios en los tratamientos](#cambios-en-los-tratamientos)
+- [Tratamientos Experimentales](#tratamientos-experimentales)
 - [Bitácora de Tratamientos Experimentales](#bitácora-de-tratamientos-experimentales)
 - [Análisis de los Datos Obtenidos](#análisis-de-los-datos-obtenidos)
   - [Análisis y Descripción de los Datos](#análisis-y-descripción-de-los-datos)
@@ -18,10 +28,6 @@
   - [Análisis Post-Hoc](#análisis-post-hoc)
 - [Conclusiones y Recomendaciones](#conclusiones-y-recomendaciones)
 - [Referencias](#referencias)
-
-## Etapa 3:  Presentación de los resultados obtenidos
-
-En este proyecto se evaluo el rendimiento de un servidor de Minecraft bajo distintas configuraciones, con el objetivo de encontrar la mejor combinación de parámetros que ofrezcan una mayor estabilidad, eficiencia en el uso de recursos y mejor experiencia de usuario.
 
 ---
 
@@ -39,43 +45,44 @@ En este proyecto se evaluo el rendimiento de un servidor de Minecraft bajo disti
 
 * ~~**Tiempo de inicio del servidor:**	Tiempo que tarda el servidor en arrancar desde que se ejecuta hasta cargar el mundo y permitir el ingreso de jugadores.~~
 
-> **Nota:** El tiempo de inicio del servidor no se condiseró debido a la variabilidad en el tamaño del mundo y la complejidad de las estructuras generadas, lo que introduce una fuente significativa de variabilidad no controlada.
+> **Nota:** El tiempo de inicio del servidor no se consideró debido a la variabilidad en el tamaño del mundo y la complejidad de las estructuras generadas, lo que introduce una fuente significativa de variabilidad no controlada.
 
-### Factores estudiados.
+### Factores estudiados
 
 * **Mods de Optimización:**
   Los mods de optimización en Fabric ayudan a mejorar la administración de memoria, la eficiencia en cálculos y la carga de chunks.
 
     * M1 sin mods (Base de comparación).
 
-    * M3 con estos mods de optimización :
+    * M3 con estos mods de optimización:
     
       - [Lithium](https://modrinth.com/mod/lithium/versions) - Un mod diseñado para mejorar drásticamente el rendimiento general de Minecraft sin romper el comportamiento vanilla del juego.
-      - [C2ME](https://modrinth.com/mod/c2me-fabric/versions) - Un mod diseñado para mejorar el rendimiento de la generación de chunks, E / S, y la carga. Esto se hace aprovechando múltiples núcleos de CPU en paralelo.
+      - [C2ME](https://modrinth.com/mod/c2me-fabric/versions) - Un mod diseñado para mejorar el rendimiento de la generación de chunks, I/O, y la carga. Esto se hace aprovechando múltiples núcleos de CPU en paralelo.
       - [VMP](https://modrinth.com/mod/vmp-fabric) - Un mod diseñado para mejorar el rendimiento general del servidor con un alto número de jugadores.
       - [FerriteCore](https://modrinth.com/mod/ferrite-core/versions) - Un mod que reduce el uso de memoria de Minecraft de diferentes maneras.
 
-      - [Noisium](https://modrinth.com/mod/noisium) - Mod que optimiza el rendimiento de la generación de mundos. Afirma obtner mejoras que se sitúan entre un 20-30% de aceleración al generar nuevos chunks.
+      - [Noisium](https://modrinth.com/mod/noisium) - Mod que optimiza el rendimiento de la generación de mundos. Afirma obtener mejoras que se sitúan entre un 20-30% de aceleración al generar nuevos chunks.
       - [Krypton](https://modrinth.com/mod/krypton/versions) - Un mod que optimiza la pila de red de Minecraft y el rastreador de entidades.
       - [Async](https://modrinth.com/mod/async) - Async es un mod de Fabric diseñado para mejorar el rendimiento de las entidades procesándolas en hilos paralelos.
       - [ServerCore](https://modrinth.com/mod/servercore) - Muchas de las optimizaciones de este mod se centran en deshacerse de la mayoría de los lagspikes aleatorios en los servidores.
-
 
 * **Parámetros de la JVM:** Los parámetros de la JVM se utilizan para configurar la Máquina Virtual Java (JVM), que se encarga de ejecutar el bytecode de Java. Al configurar adecuadamente los parámetros de la JVM, podemos mejorar el rendimiento de las aplicaciones Java:
 
   * Reducir la fragmentación del almacenamiento dinámico
   * Mejorar el rendimiento de las aplicaciones Java
   * Establecer el tamaño de las agrupaciones de memoria
-  * Supervisar las estadísticas de recogida de basura
+  * Supervisar las estadísticas de recolección de basura
   * Personalizar los valores de la agrupación generacional
   * Detectar fugas de memoria
 
-  Los parámetros a usar se dividiran en los conjuntos P1, P2 Y P3:
+  Los parámetros a usar se dividirán en los conjuntos P1, P2 Y P3:
 
   * P1: Conjunto básico de argumentos generados por Crafty Controller para ejecutar el servidor:
  `java -Xms1000M -Xmx14336M -jar fabric-1.21.4.jar nogui`
 
   * P3: Conjunto de parámetros generados por herramientas en línea como [flags.sh](https://flags.sh):
+
+  (Los tratamientos con P2 no fueron utilizados en este experimento, por lo que no se detallan aquí)
 
   ```sh
   java -Xms14336M -Xmx14336M --add-modules=jdk.incubator.vector -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -XX:G1NewSizePercent=40 -XX:G1MaxNewSizePercent=50 -XX:G1HeapRegionSize=16M -XX:G1ReservePercent=15 -jar fabric-1.21.4.jar --nogui
@@ -92,23 +99,7 @@ El rendimiento del servidor también se ve afectado por la distancia de renderiz
 
 ---
 
-### Cambios en los tratamientos
-
-Tratamientos anteriores
-
-| **Tratamiento** | **Mods** | **JVM** | **Configuración del Servidor** | **Hipótesis** |
-|---------------|------------------------------|------|----------------------|----------------|
-| **T1** | M1 | P1 | C1 | Establece la línea base de rendimiento sin optimizaciones. Se espera el desempeño más bajo en eficiencia de recursos y estabilidad. |
-| **T2** | M1 | P2 | C1 | El uso de parámetros JVM manualmente seleccionados mejorará el desempeño en comparación con la configuración base (T1). |
-| **T3** | M1 | P3 | C1 | Se espera que los parámetros generados automáticamente mejoren el rendimiento más que los parámetros manuales (T2) y la configuración base (T1). |
-| **T4** | M2 | P1 | C1 | La adición de un pequeño conjunto de mods de optimización mejorará la eficiencia del servidor frente a (T1) y (T2). |
-| **T5** | M3 | P1 | C1 | Un conjunto más amplio de mods de optimización debería mejorar aún más el rendimiento frente a (T4) y (T1). |
-| **T6** | M2 | P2 | C1 | La adición de un pequeño conjunto de mods de optimización y los parámetros JVM seleccionados reducirán el uso de recursos, especialmente en comparación con (T1) y a menor grado con (T2) y (T4)|
-| **T7** | M3 | P3 | C1 | La combinación de muchos mods y parámetros automáticos representa la segunda mayor intervención y se espera que logre el mejor rendimiento general frente a todos los tratamientos anteriores. |
-| **T8** | M3 | P3 | C2 | La combinación de muchos mods, parámetros automáticos y configuración ligera representa la mayor intervención y se espera que logre el mejor rendimiento general frente a todos los tratamientos. |
-| **T9** | M3 | P3 | C3 | Se busca determinar si las máximas optimizaciones resisten una configuración exigente, manteniendo estabilidad bajo alta carga. |
-
-**Nuevos tratamientos:**
+### Tratamientos Experimentales
 
 | **Tratamiento** | **Mods** | **JVM** | **Configuración del Servidor** | **Hipótesis** |
 |---------------|------------------------------|------|----------------------|----------------|
@@ -117,7 +108,7 @@ Tratamientos anteriores
 | **T3** | M1 | P3 | C1 | Se espera que los parámetros generados automáticamente mejoren el rendimiento más que la configuración base (T1). |
 | **T4** | M3 | P1 | C1 | Un conjunto más amplio de mods de optimización debería mejorar aún más el rendimiento frente a (T4). |
 | **T5** | M3 | P3 | C1 | La combinación de muchos mods y parámetros automáticos representa la segunda mayor intervención y se espera que logre el mejor rendimiento general frente a todos los tratamientos anteriores. |
-| **T6** | M3 | P3 | C2 |nLa combinación de muchos mods, parámetros automáticos y configuración ligera representa la mayor intervención y se espera que logre el mejor rendimiento general frente a todos los tratamientos. |
+| **T6** | M3 | P3 | C2 | La combinación de muchos mods, parámetros automáticos y configuración ligera representa la mayor intervención y se espera que logre el mejor rendimiento general frente a todos los tratamientos. |
 | **T7** | M3 | P3 | C3 | Se busca determinar si las máximas optimizaciones resisten una configuración exigente, manteniendo estabilidad bajo alta carga. |
 
 ### Bitácora de Tratamientos Experimentales
@@ -199,9 +190,9 @@ Los boxplots elaborados proporcionan una perspectiva visual integral de la distr
 
 - **Eficiencia contrastante:** Los boxplots revelan una clara diferenciación entre tratamientos eficientes (T4, T7) con medianas bajas y distribuciones compactas, versus configuraciones intensivas (T2, T5)
 - **Patrones de carga:** T2 muestra valores atípicos en el extremo superior, indicando picos ocasionales de alta demanda computacional a pesar de su eficiencia promedio
-- **Estabilidad operacional:** T4 presenta una distribución más concentrada en el rango medio, sugiriendo un consumo consistentemente elevado pero predecible, T7 se comporta de manera similar, pero con mayor variabilidad y minimos más bajos.
+- **Estabilidad operacional:** T4 presenta una distribución más concentrada en el rango medio, sugiriendo un consumo consistentemente elevado pero predecible, T7 se comporta de manera similar, pero con mayor variabilidad y mínimos más bajos.
 
-T3 presenta la menor media de uso de CPU, pero con una distribución más amplia, lo que indica que aunque en promedio es eficiente, puede experimentar picos de carga significativos. Además como se verá más adelante, T3 es el tratamiento con una de las medias más altas de uso de RAM, lo que sugiere que la eficiencia en CPU no siempre se traduce en un uso eficiente de memoria.
+T3 presenta la menor media de uso de CPU, pero con una distribución más amplia, lo que indica que aunque en promedio es eficiente, puede experimentar picos de carga significativos. Además, como se verá más adelante, T3 es el tratamiento con una de las medias más altas de uso de RAM, lo que sugiere que la eficiencia en CPU no siempre se traduce en un uso eficiente de memoria.
 
 **RAM Usage (MB):**
 
@@ -224,7 +215,7 @@ Tras el análisis descriptivo y visual, es fundamental verificar los supuestos e
 Para ello, se realizó un análisis de la normalidad para cada variable de respuesta (TPS, uso de CPU y uso de RAM) en cada tratamiento, utilizando el test de Shapiro-Wilk y gráficos Q-Q (Malato, 2025).
 
 **Test de Shapiro-Wilk:**  
-Se aplicó el test de Shapiro-Wilk a los datos de cada tratamiento y métrica. En casi todos los casos, los p-valores obtenidos fueron menores a 0.05, lo que indica que las distribuciones no siguen una distrubución normal.
+Se aplicó el test de Shapiro-Wilk a los datos de cada tratamiento y métrica. En casi todos los casos, los p-valores obtenidos fueron menores a 0.05, lo que indica que las distribuciones no siguen una distribución normal.
 
 **Gráficos Q-Q:**  
 Se elaboraron gráficos Q-Q para cada combinación de tratamiento y métrica, observándose desviaciones sistemáticas respecto a la línea de normalidad, lo que respalda los resultados del test de Shapiro-Wilk.
@@ -349,7 +340,7 @@ Matriz de comparaciones post-hoc para RAM:
 
 Los análisis post-hoc revelan que, aunque la prueba de Kruskal-Wallis **detectó diferencias significativas** entre tratamientos, el **impacto práctico es mínimo**. T1 y T2 (configuraciones básicas) muestran diferencias significativas frente a la mayoría de tratamientos optimizados (T4-T7), pero los tamaños del efecto son predominantemente pequeños a moderados (r = 0.124-0.359). La diferencia real en TPS entre las medias más alta y más baja es apenas **0.22 ticks**, lo que en términos prácticos resulta imperceptible para la experiencia de juego.
 
-**Principal hallazgo:**: T2 presenta valores mínimos extremos (6.35 TPS), indicando que una configuración exigente sin optimizaciones puede generar episodios críticos de degradación del rendimiento, confirmando la necesidad de optimizaciones bajo cargas altas.
+**Principal hallazgo:** T2 presenta valores mínimos extremos (6.35 TPS), indicando que una configuración exigente sin optimizaciones puede generar episodios críticos de degradación del rendimiento, confirmando la necesidad de optimizaciones bajo cargas altas.
 
 #### Uso de CPU
 
@@ -376,12 +367,12 @@ Los tamaños del efecto son consistentemente muy grandes (r > 0.7), con diferenc
 - La cantidad de jugadores activos por tratamiento no fue estandarizada completamente, lo que introduce una fuente significativa de variabilidad no controlada
 - Esta variabilidad puede explicar parcialmente los valores atípicos observados en TPS y CPU, especialmente en tratamientos como T2 que mostraron episodios de degradación severa
 
-Para controlar este factor, se agrego una función en la [extracción de datos](/src/extract_response_vars_iterations.py) donde se limpian los registros obtenidos cuando un jugador no ha estado conectado durante más de una cantiad de minutos selecta (1 minuto en este caso).
+Para controlar este factor, se agregó una función en la [extracción de datos](/src/extract_response_vars_iterations.py) donde se limpian los registros obtenidos cuando un jugador no ha estado conectado durante más de una cantidad de minutos selecta (1 minuto en este caso).
 
 **Efectos de Inactividad y Bloqueo Experimental:**
 
 - Los períodos de inactividad del servidor afectaron la continuidad de las mediciones, requiriendo implementar estrategias de bloqueo temporal
-- Los reiniciarios y pausas del servidor pueden haber influido en los patrones de uso de memoria, especialmente en el comportamiento del garbage collector de Java
+- Los reinicios y pausas del servidor pueden haber influido en los patrones de uso de memoria, especialmente en el comportamiento del garbage collector de Java
 
 **Heterogeneidad del Entorno de Ejecución:**
 
@@ -411,7 +402,7 @@ Para controlar este factor, se agrego una función en la [extracción de datos](
 
 **Eficiencia Computacional (CPU):**
 
-- **Incógnita de optimización::** Contraintuitivamente, T3 (solo JVM optimizado, 16.42% promedio) demuestra mayor eficiencia que configuraciones con múltiples mods de optimización como T4 y T7 (21.36-22.0% promedio).
+- **Incógnita de optimización:** Contraintuitivamente, T3 (solo JVM optimizado, 16.42% promedio) demuestra mayor eficiencia que configuraciones con múltiples mods de optimización como T4 y T7 (21.36-22.0% promedio).
 - **Intercambio identificado:** Los mods de optimización, aunque mejoran estabilidad, incrementan la carga computacional, sugiriendo que las optimizaciones JVM son más eficientes energéticamente.
 - **Implicación práctica:** Para entornos con recursos limitados de CPU, priorizar configuraciones base optimizadas (T1, T3) sobre configuraciones con múltiples mods.
 
